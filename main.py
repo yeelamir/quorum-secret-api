@@ -7,28 +7,16 @@ from pydantic import BaseModel
 import os
 from authenticationMiddleware import AuthenticationMiddleware
 import uvicorn
-from db_layer import db_querries
 from hashlib import sha256
 import secrets
-from db_layer.entities.user import User, User_id_name, User_publickey
+from db_layer.db_querries import data_access_layer
+from db_layer.entities.user import User, User_id_name
 from db_layer.entities.secret import Secret, NewSecret
 from encryption import aes, rsa, sss
 import base64
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.openapi.models import OAuth2 as OAuth2Model
-from fastapi.security import OAuth2PasswordBearer
 
 
-
-# test_secret = b'a' * 32  # 256 bits = 32 bytes
-# shares = sss.split_secret(test_secret, 3, 2)  # Split into 3 shares, with a quorum of 2
-# test_secret_reconstructed = sss.reconstruct_secret(shares[:2])  # Reconstruct using 2 shares
-# if test_secret != test_secret_reconstructed:
-#     print("Secret reconstruction failed!")
-# else:
-#     print("Secret reconstruction succeeded!")
-
-PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
+PEPPER = os.getenv("QUORUM_APP_PEPPER", "d5f3ce1e98860bbc95b7140df809db5f"),
 
 def hash_password_with_salt(password: str, salt: str) -> str:
     sha256_val = sha256((salt + PEPPER + password).encode())
@@ -104,6 +92,13 @@ exempt_routes = [
 app.add_middleware(AuthenticationMiddleware, secret_key=get_secret_key(), exempt_routes=exempt_routes)
 
 
+data_access_layer = data_access_layer(
+    db_host=os.getenv("QUORUM_APP_DB_HOST", "localhost"),
+    db_user=os.getenv("QUORUM_APP_DB_USER", "root"),
+    db_password=os.getenv("QUORUM_APP_DB_PASSWORD", "abc123"),
+    db_name=os.getenv("QUORUM_APP_DB_NAME", "quorum_secrets")
+);
+
 def generate_jwt_token(user_id: int, username: str, secret_key):
     #TODO: Change the expiration to 60 minutes
     expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=360)  # expiration time 
@@ -125,8 +120,7 @@ async def get_secrets(request: Request):
     try:
         # Get the user ID from the request state
         user_id = request.state.user['user_id']
-        db_querriess = db_querries.db_querries()
-        return db_querriess.get_all_secrets(user_id)
+        return data_access_layer.get_all_secrets(user_id)
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -136,23 +130,20 @@ async def get_secrets(request: Request):
 @app.get("/secrets/{secret_id}", response_model=Secret)
 async def get_secret_by_id(request: Request, secret_id: int):
     user_id = request.state.user['user_id']
-    db_querriess = db_querries.db_querries()
-    return db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    return data_access_layer.get_shared_secret_by_id(user_id, secret_id)
 
 
 # Delete secret by ID - only the owner can delete it
 @app.delete("/secrets/{secret_id}")
 async def delete_secret_by_id(request: Request, secret_id: int):
     user_id = request.state.user['user_id']
-    db_querriess = db_querries.db_querries()
-
-    secret = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    secret = data_access_layer.get_shared_secret_by_id(user_id, secret_id)
     if not secret:
         return {"validation": False, "message": "Secret not found"}
     if not secret['IsOwner']:
         return {"validation": False, "message": "You are not the owner of this secret"}
 
-    db_querriess.delete_secret_by_id(secret_id)
+    data_access_layer.delete_secret_by_id(secret_id)
 
     return {"validation": True, "message": "Secret deleted successfully!"}
 
@@ -164,8 +155,7 @@ class PrivateKey(BaseModel):
 @app.patch("/secrets/set_decrypt_request/{secret_id}")
 async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: PrivateKey):
     user_id = request.state.user['user_id']
-    db_querriess = db_querries.db_querries()
-    secret_data = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    secret_data = data_access_layer.get_shared_secret_by_id(user_id, secret_id)
     if not secret_data:
         return {"validation": False, "message": "Secret not found"}
     
@@ -188,24 +178,24 @@ async def set_decrypt_request(request: Request, secret_id: int, decrypt_request:
 
     # Update the secret share in the database with the decrypted secret share
     # and set the decrypt request to true
-    db_querriess.set_decrypt_request(user_id, secret_id, base64.b64encode(decrypted_secret_share))
+    data_access_layer.set_decrypt_request(user_id, secret_id, base64.b64encode(decrypted_secret_share))
 
 
     if n_decrypt_request == quorum -1:
         #Get all the secret shares that their decripy request is true from the database
-        decrypted_secret_shares = [n['SecretShare'] for n in db_querriess.get_decrypted_secret_shares(secret_id)]
+        decrypted_secret_shares = [n['SecretShare'] for n in data_access_layer.get_decrypted_secret_shares(secret_id)]
         # Reconstruct the secret with the secret shares
         sss_secret = sss.reconstruct_secret(decrypted_secret_shares)
 
         #Decrypt the secret for all the users that the secret is shared with
         # Get the secret shares from the database
-        secret_shares = db_querriess.get_secret_shares(secret_id)
+        secret_shares = data_access_layer.get_secret_shares(secret_id)
         # Decrypt the secret for all the users that the secret is shared with
         for share in secret_shares:
             user_id = share['UserId']
             encrypted_secret = rsa.encrypt(share['PublicKey'], sss_secret)
             # Update the encrypted secret in the database and delete the secret share
-            db_querriess.set_encrypted_secret(user_id, secret_id, base64.b64encode(encrypted_secret))
+            data_access_layer.set_encrypted_secret(user_id, secret_id, base64.b64encode(encrypted_secret))
         
 
 
@@ -216,8 +206,7 @@ async def set_decrypt_request(request: Request, secret_id: int, decrypt_request:
 @app.post("/secrets/secret_content/{secret_id}")
 async def set_decrypt_request(request: Request, secret_id: int, user_private_key: PrivateKey):
     user_id = request.state.user['user_id']
-    db_querriess = db_querries.db_querries()
-    secret_data = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    secret_data = data_access_layer.get_shared_secret_by_id(user_id, secret_id)
     if not secret_data:
         return {"validation": False, "message": "Secret not found"}
     
@@ -226,7 +215,7 @@ async def set_decrypt_request(request: Request, secret_id: int, user_private_key
     
     #Decrypt the secret with the private key of the user
     aes_key = rsa.decrypt(user_private_key.private_key, base64.b64decode(secret_data['EncryptedSecret'])) 
-    cipher_and_iv = db_querriess.get_cipher_by_id(secret_id)
+    cipher_and_iv = data_access_layer.get_cipher_by_id(secret_id)
     #Decrypt the secret with the AES256 key and IV
     iv = cipher_and_iv['IV']  
     the_secret = aes.decrypt_secret(cipher_and_iv['Cipher'], aes_key, iv)
@@ -238,8 +227,7 @@ async def set_decrypt_request(request: Request, secret_id: int, user_private_key
 # Secure endpoint that requires authentication
 @app.get("/users", response_model=List[User_id_name])
 async def get_users():
-    db_querriess = db_querries.db_querries()
-    return db_querriess.get_users()
+    return data_access_layer.get_users()
 
 class User(BaseModel):
     username: str
@@ -252,8 +240,7 @@ class TokenModel(BaseModel):
 
 @app.post("/secrets")
 def insert_new_secret(request: Request, secret: NewSecret):
-    db_querriess = db_querries.db_querries()
-    secret_data = db_querriess.get_secret_by_name([secret.name])
+    secret_data = data_access_layer.get_secret_by_name([secret.name])
     if secret_data:
         return {"validation": False, "message": "Secret name already exists"}
     
@@ -263,29 +250,28 @@ def insert_new_secret(request: Request, secret: NewSecret):
     aes_key = aes.get_secret_key()
     #2. Encrypt the secret with the AES256 key and store it in the Secrets table together with the metadata
     encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv)
-    secret_id = db_querriess.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date, iv)
+    secret_id = data_access_layer.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date, iv)
     #3. Encrypt the AES256 key with the public keys of the owner and the group members and store it in the UserSecret table
     user_id = request.state.user['user_id']
-    owner_public_key = db_querriess.get_user_publickey(user_id)
+    owner_public_key = data_access_layer.get_user_publickey(user_id)
     owner_encrypted_key = rsa.encrypt(owner_public_key, aes_key)
     owner_encrypted_key_str = base64.b64encode(owner_encrypted_key).decode('utf-8')
-    db_querriess.insert_user_secret(user_id, secret_id, True, owner_encrypted_key_str)
+    data_access_layer.insert_user_secret(user_id, secret_id, True, owner_encrypted_key_str)
     #4. Create the AES256 key shares for all the group members. Encrypt each share with the user public key and store it in the UserSecret table
     secret_shares = sss.split_secret(aes_key, len(secret.group_users), secret.quorum)
 
     for i, user in enumerate(secret.group_users):
-        user_public_key = db_querriess.get_user_publickey(user)
+        user_public_key = data_access_layer.get_user_publickey(user)
         secret_share_bytes = base64.b64decode(secret_shares[i])
         user_encrypted_share = rsa.encrypt(user_public_key, secret_share_bytes)
         user_encrypted_share_str = base64.b64encode(user_encrypted_share).decode('utf-8')
-        db_querriess.insert_user_secret(user, secret_id, False, user_encrypted_share_str)
+        data_access_layer.insert_user_secret(user, secret_id, False, user_encrypted_share_str)
 
     return {"validation": True, "message": "Secret inserted successfully!"}
 
 @app.post("/login", response_model=TokenModel)
 def login(user: User):
-    db_querriess = db_querries.db_querries()
-    user_data = db_querriess.get_user_by_username([user.username])
+    user_data = data_access_layer.get_user_by_username([user.username])
     if user_data:
         password_hash = user_data['PasswordHash']
         salt = user_data['Salt']
@@ -298,14 +284,13 @@ def login(user: User):
     
 @app.post("/register")
 def register(user: User):
-    db_querriess = db_querries.db_querries()
-    username = db_querriess.get_user_by_username([user.username])
+    username = data_access_layer.get_user_by_username([user.username])
     if username:
         return {"validation": False, "message": "Username already exists"}
     else:
         public_key, private_key = rsa.generate_key()
         salt = random_salt()
-        db_querriess.insert_user(public_key, user.username, salt, hash_password_with_salt(user.password, salt))
+        data_access_layer.insert_user(public_key, user.username, salt, hash_password_with_salt(user.password, salt))
         return {"validation": True, "message": "User registered successfully!", "private_key": private_key}
 
 
