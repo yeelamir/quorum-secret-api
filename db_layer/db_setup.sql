@@ -4,8 +4,8 @@ CREATE DATABASE IF NOT EXISTS quorum_secrets;
 -- Use the created database
 USE quorum_secrets;
 
--- Create the 'User' table
-CREATE TABLE IF NOT EXISTS User (
+-- Create the 'Users' table
+CREATE TABLE IF NOT EXISTS Users (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,              -- User Id, auto-incremented
     PublicKey TEXT NOT NULL,                           -- RSA 4096 Public Key
     Username VARCHAR(256) NOT NULL,                    -- Username, up to 256 chars
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS User (
 );
 
 
--- Create the 'Secret' table
-CREATE TABLE IF NOT EXISTS Secret (
+-- Create the 'Secrets' table
+CREATE TABLE IF NOT EXISTS Secrets (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,              -- Secret Id, auto-incremented
     Quorum SMALLINT NOT NULL,                          -- Quorum, short integer
     Cipher BLOB NOT NULL,                             -- Cipher, stored as BLOB
@@ -36,9 +36,9 @@ CREATE TABLE IF NOT EXISTS UserSecret (
     DecryptRequest BOOLEAN NOT NULL,                  -- Boolean indicating if decrypting is requested
     PRIMARY KEY (UserId, SecretId),                 -- Composite primary key on UserId and SecretId
     CONSTRAINT fk_user_id FOREIGN KEY (UserId)      -- Foreign key to User table
-      REFERENCES User (Id)
+      REFERENCES Users (Id)
       ON DELETE CASCADE,                                -- Cascade delete if User is deleted
     CONSTRAINT fk_secret_id FOREIGN KEY (SecretId)  -- Foreign key to Secret table
-      REFERENCES Secret (Id)
+      REFERENCES Secrets (Id)
       ON DELETE CASCADE                                 -- Cascade delete if Secret is deleted
 ) 
