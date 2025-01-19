@@ -18,19 +18,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class UserInfo(BaseModel):
+class User(BaseModel):
     username: str
     password: str
 
-
-@app.get("/admin")
-async def root(username: str, password: str):
-    result = False
-    if username == "tomer" and password == "king1":
-        result = True
-    return {"access granted": result}
-
-
-@app.post("/singup")
-async def root(info: UserInfo):
-    return {"error" : info.username}
+@app.post("/login")
+def login(user: User):
+    if user.username == "yeelam" and user.password == "theQueen":
+        return {"validation": True}
+    else:
+        return {"validation": False}    
+    
