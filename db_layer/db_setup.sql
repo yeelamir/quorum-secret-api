@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS Users (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,              -- User Id, auto-incremented
     PublicKey TEXT NOT NULL,                           -- RSA 4096 Public Key
     Username VARCHAR(256) NOT NULL,                    -- Username, up to 256 chars
-    Salt BIGINT NOT NULL,                              -- Salt, as long integer
+    Salt VARCHAR(32) NOT NULL,                              -- Salt, as long integer
     PasswordHash CHAR(64) NOT NULL,                    -- SHA-256 hash (64 chars hex)
     UNIQUE (Username),    
     INDEX idx_username (Username)                              -- Ensure the username is unique
