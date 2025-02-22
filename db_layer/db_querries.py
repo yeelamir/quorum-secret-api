@@ -3,6 +3,8 @@ import pymysql
 from pymysql.cursors import DictCursor
 
 from db_layer.entities.secret import Secret
+from db_layer.entities.user import User, User_id_name
+
 
 
 class db_querries:
@@ -43,6 +45,51 @@ class db_querries:
             self.mycursor.execute(sql, (user_id,))
             all_secrets = self.mycursor.fetchall()
             return all_secrets
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+    def get_secret_by_name(self, name: str):
+        try:
+            sql = "SELECT * FROM secrets WHERE Name = %s;"
+            self.mycursor.execute(sql, name)
+            return self.mycursor.fetchone()
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+    def insert_secret(self, quorum: int, cipher: str, name: str, comments: str) -> None:
+        try:
+            sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`) VALUES (%s, %s, %s, %s);"
+            val = (quorum, cipher, name, comments)
+            self.mycursor.execute(sql, val)
+            self.mydb.commit()
+            print(self.mycursor.rowcount, "record inserted.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+    def get_users(self) -> List[User_id_name]:
+        try:
+            sql = """
+                SELECT Id, Username
+                FROM quorum_secrets.users;
+            """
+            self.mycursor.execute(sql)
+            all_users = self.mycursor.fetchall()
+            return all_users
+        
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+    def get_secret_users(self, secret_id: int) -> List[User_id_name]:
+        try:
+            sql = """
+                SELECT us.UserId, s.Username
+                FROM quorum_secrets.usersecret us
+                JOIN quorum_secrets.users s on s.Id = us.UserId
+                WHERE us.SecretId = %s;
+            """
+            self.mycursor.execute(sql, (secret_id,))
+            all_users = self.mycursor.fetchall()
+            return all_users
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 

@@ -10,7 +10,7 @@ import uvicorn
 from db_layer import db_querries
 from hashlib import sha256
 import secrets
-
+from db_layer.entities.user import User, User_id_name
 from db_layer.entities.secret import Secret
 
 PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
@@ -90,16 +90,30 @@ async def get_secrets(request: Request):
     db_querriess = db_querries.db_querries()
     return db_querriess.get_all_secrets(user_id)
 
-
+# Secure endpoint that requires authentication
+@app.get("/users", response_model=List[User_id_name])
+async def get_users():
+    db_querriess = db_querries.db_querries()
+    return db_querriess.get_users()
 
 class User(BaseModel):
     username: str
     password: str
 
+    
+
 class TokenModel(BaseModel):
     token: str
     expiration: str
 
+@app.post("/NewSecret", response_model=TokenModel)
+def insert_new_secret(secret: Secret):
+    db_querriess = db_querries.db_querries()
+    secret_data = db_querriess.get_secret_by_name([secret.name])
+    if secret_data:
+        return {"validation": False, "message": "Secret name already exists"}
+    db_querriess.insert_secret(secret.quorum, "Cipher", secret.name, secret.comments)
+    return {"validation": True, "message": "Secret inserted successfully!"}
 
 @app.post("/login", response_model=TokenModel)
 def login(user: User):
