@@ -23,9 +23,11 @@ CREATE TABLE IF NOT EXISTS Secrets (
     Cipher BLOB NOT NULL,                             -- Cipher, stored as BLOB
     Name VARCHAR(256) NOT NULL,                        -- Name of the secret, up to 256 chars
     Comments TEXT NOT NULL,                            -- Comments, up to 4096 chars
+    StartingDate DATETIME DEFAULT NULL,                  -- Starting date, optional
     UNIQUE (Name),                                     -- Ensure the name is unique
     INDEX idx_name (Name)
 );
+
 
 -- Create the junction table for the many-to-many relationship
 CREATE TABLE IF NOT EXISTS UserSecret (

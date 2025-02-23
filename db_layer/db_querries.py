@@ -1,7 +1,7 @@
 from typing import List
 import pymysql
 from pymysql.cursors import DictCursor
-
+import datetime
 from db_layer.entities.secret import Secret
 from db_layer.entities.user import User, User_id_name
 
@@ -33,20 +33,24 @@ class db_querries:
         sql = "SELECT * FROM users WHERE Username = %s;"
         self.mycursor.execute(sql, username)
         return self.mycursor.fetchone()
-
+    
     def get_all_secrets(self, user_id: int) -> List[Secret]:
-        try:
-            sql = """
-                SELECT us.SecretId, us.DecryptRequest, us.IsOwner, s.Name, s.Quorum, s.Comments
-                FROM quorum_secrets.usersecret us
-                JOIN quorum_secrets.secrets s on s.Id = us.SecretId
-                WHERE us.UserId = %s;
-            """
-            self.mycursor.execute(sql, (user_id,))
-            all_secrets = self.mycursor.fetchall()
-            return all_secrets
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            try:
+                sql = """
+                    SELECT us.SecretId, us.DecryptRequest, us.IsOwner, s.Name, s.Quorum, s.Comments, s.StartingDate,
+                    COUNT(DISTINCT us2.UserId) AS NDecryptRequest
+                    FROM quorum_secrets.usersecret us
+                    JOIN quorum_secrets.secrets s on s.Id = us.SecretId
+                    LEFT JOIN quorum_secrets.usersecret us2 ON s.Id = us2.SecretId AND us2.DecryptRequest = 1  
+                    WHERE us.UserId = %s
+                    GROUP BY us.SecretId, us.DecryptRequest, us.IsOwner, s.Name, s.Quorum, s.Comments, s.StartingDate;
+                """
+                self.mycursor.execute(sql, (user_id,))
+                all_secrets = self.mycursor.fetchall()
+                return all_secrets
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+
 
     def get_secret_by_name(self, name: str):
         try:
@@ -56,10 +60,10 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def insert_secret(self, quorum: int, cipher: str, name: str, comments: str) -> None:
+    def insert_secret(self, quorum: int, cipher: str, name: str, comments: str, starting_date: datetime.datetime) -> None:
         try:
-            sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`) VALUES (%s, %s, %s, %s);"
-            val = (quorum, cipher, name, comments)
+            sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`, `StartingDate`) VALUES (%s, %s, %s, %s, %s);"
+            val = (quorum, cipher, name, comments, starting_date)
             self.mycursor.execute(sql, val)
             self.mydb.commit()
             print(self.mycursor.rowcount, "record inserted.")
