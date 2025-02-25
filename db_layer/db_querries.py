@@ -60,15 +60,26 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def insert_secret(self, quorum: int, cipher: str, name: str, comments: str, starting_date: datetime.datetime) -> None:
+    def get_user_publickey(self, id: int):
+        try:
+            sql = "SELECT PublicKey FROM users WHERE Id = %s;"
+            self.mycursor.execute(sql, id)
+            return self.mycursor.fetchone()
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+    def insert_secret(self, quorum: int, cipher: bytearray, name: str, comments: str, starting_date: datetime.datetime) -> int:
         try:
             sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`, `StartingDate`) VALUES (%s, %s, %s, %s, %s);"
             val = (quorum, cipher, name, comments, starting_date)
             self.mycursor.execute(sql, val)
             self.mydb.commit()
-            print(self.mycursor.rowcount, "record inserted.")
+            new_secret_id = self.mycursor.lastrowid  # Get the ID of the newly inserted row
+            print("record inserted.", new_secret_id)
+            return new_secret_id
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            return -1
 
     def get_users(self) -> List[User_id_name]:
         try:

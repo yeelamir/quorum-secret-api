@@ -15,5 +15,18 @@ class Secret(BaseModel):
     StartingDate: Optional[datetime.datetime]
     NDecryptRequest: int
 
+
+    class Config:
+        orm_mode = True  # This tells Pydantic to work with dictionary-like data (from SQL query results)
+
+    #{"name":"sha256","secret":"shhhh","quorum":"2","comment":"","starting_date":"2025-02-28","group_users":[13,18,15]}
+class NewSecret(BaseModel):
+    name: str
+    secret: str
+    quorum: int
+    comment: str
+    starting_date: datetime.datetime
+    group_users: List[int]
+
     class Config:
         orm_mode = True  # This tells Pydantic to work with dictionary-like data (from SQL query results)

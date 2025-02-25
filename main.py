@@ -11,7 +11,8 @@ from db_layer import db_querries
 from hashlib import sha256
 import secrets
 from db_layer.entities.user import User, User_id_name
-from db_layer.entities.secret import Secret
+from db_layer.entities.secret import Secret, NewSecret
+from encryption import aes, rsa
 
 PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
 
@@ -29,20 +30,6 @@ def get_secret_key():
 app = FastAPI()
 
 
-# Customizing OpenAPI schema to add the Bearer token security requirement explicitly
-# @app.on_event("startup")
-# async def add_security_scheme():
-#     aa = app.openapi_schema
-#     app.openapi_schema["components"]["securitySchemes"] = {
-#         "BearerAuth": {
-#             "type": "http",
-#             "scheme": "bearer",
-#             "bearerFormat": "JWT",  # You can adjust this if you're using a specific JWT format
-#         }
-#     }
-#     app.openapi_schema["security"] = [
-#         {"BearerAuth": []}
-#     ]
 
 origins = [
     "http://localhost:3000",
@@ -100,19 +87,42 @@ class User(BaseModel):
     username: str
     password: str
 
-    
-
 class TokenModel(BaseModel):
     token: str
     expiration: str
 
-@app.post("/NewSecret", response_model=TokenModel)
-def insert_new_secret(secret: Secret):
+
+@app.post("/secrets")
+def insert_new_secret(request: Request, secret: NewSecret):
     db_querriess = db_querries.db_querries()
     secret_data = db_querriess.get_secret_by_name([secret.name])
     if secret_data:
         return {"validation": False, "message": "Secret name already exists"}
-    db_querriess.insert_secret(secret.quorum, "Cipher", secret.name, secret.comments)
+    
+
+    #Creating a new secret
+    #1. Generate a random AES256 key and IV
+    iv = aes.get_iv()
+    aes_key = aes.get_secret_key()
+
+    #2. Encrypt the secret with the AES256 key and store it in the Secrets table together with the metadata
+    encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv)
+    secret_id = db_querriess.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date)
+    #3. Encrypt the AES256 key with the public keys of the owner and the group members and store it in the UserSecret table
+    user_id = request.state.user['user_id']
+    owner_public_key = db_querriess.get_user_publickey(user_id)
+    owner_encrypted_key = rsa.encrypt(owner_public_key, aes_key)
+    db_querriess.insert_user_secret(user_id, secret_id, True, owner_encrypted_key)
+    #4. Create the AES256 key shares for all the group members. Encrypt each share with the user public key and store it in the UserSecret table
+    secret_shares = sss.split_secret(aes_key, secret.quorum, len(secret.group_users))
+    i = 0
+    for user in secret.group_users:
+        user_public_key = db_querriess.get_user_publickey(user)
+        user_encrypted_key = rsa.encrypt(user_public_key, aes_key)
+        db_querriess.insert_user_secret(user_id, secret_id, False, secret_shares[i])
+        i += 1
+
+
     return {"validation": True, "message": "Secret inserted successfully!"}
 
 @app.post("/login", response_model=TokenModel)
@@ -136,9 +146,10 @@ def register(user: User):
     if username:
         return {"validation": False, "message": "Username already exists"}
     else:
+        public_key, private_key = rsa.generate_key()
         salt = random_salt()
-        db_querriess.insert_user('PublicKey', user.username, salt, hash_password_with_salt(user.password, salt))
-        return {"validation": True, "message": "User registered successfully!", "public_key": "PublicKey"}
+        db_querriess.insert_user(public_key, user.username, salt, hash_password_with_salt(user.password, salt))
+        return {"validation": True, "message": "User registered successfully!", "private_key": private_key}
 
 
 

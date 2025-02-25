@@ -20,14 +20,15 @@ CREATE TABLE IF NOT EXISTS Users (
 CREATE TABLE IF NOT EXISTS Secrets (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,              -- Secret Id, auto-incremented
     Quorum SMALLINT NOT NULL,                          -- Quorum, short integer
-    Cipher BLOB NOT NULL,                             -- Cipher, stored as BLOB
+    IV BINARY(16) NOT NULL                             -- IV for the cipher
+    Cipher BLOB NOT NULL,                              -- Cipher, stored as BLOB
     Name VARCHAR(256) NOT NULL,                        -- Name of the secret, up to 256 chars
     Comments TEXT NOT NULL,                            -- Comments, up to 4096 chars
     StartingDate DATETIME DEFAULT NULL,                  -- Starting date, optional
+    NDecryptRequest SMALLINT NOT NULL DEFAULT 0 ,               -- Number of decrypt requests, short integer 
     UNIQUE (Name),                                     -- Ensure the name is unique
     INDEX idx_name (Name)
 );
-
 
 -- Create the junction table for the many-to-many relationship
 CREATE TABLE IF NOT EXISTS UserSecret (
@@ -35,9 +36,9 @@ CREATE TABLE IF NOT EXISTS UserSecret (
     SecretId BIGINT NOT NULL,                         -- Foreign key to Secret
     IsOwner BOOLEAN NOT NULL,                         -- Boolean indicating if the user is the owner
     SecretShare VARCHAR(1024),                        -- Optional string for secret sharing details
-    DecryptRequest BOOLEAN NOT NULL,                  -- Boolean indicating if decrypting is requested
-    PRIMARY KEY (UserId, SecretId),                 -- Composite primary key on UserId and SecretId
-    CONSTRAINT fk_user_id FOREIGN KEY (UserId)      -- Foreign key to User table
+    DecryptRequest BOOLEAN NOT NULL DEFAULT 0,       -- Boolean indicating if decrypting is requested
+    PRIMARY KEY (UserId, SecretId),                   -- Composite primary key on UserId and SecretId
+    CONSTRAINT fk_user_id FOREIGN KEY (UserId)        -- Foreign key to User table
       REFERENCES Users (Id)
       ON DELETE CASCADE,                                -- Cascade delete if User is deleted
     CONSTRAINT fk_secret_id FOREIGN KEY (SecretId)  -- Foreign key to Secret table
