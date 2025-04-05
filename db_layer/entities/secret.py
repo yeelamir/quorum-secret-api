@@ -14,6 +14,8 @@ class Secret(BaseModel):
     Comments: str
     StartingDate: Optional[datetime.datetime]
     NDecryptRequest: int
+    SecretShare: str
+    EncryptedSecret: str
 
 
     class Config:

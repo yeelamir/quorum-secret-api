@@ -10,9 +10,9 @@ import uvicorn
 from db_layer import db_querries
 from hashlib import sha256
 import secrets
-from db_layer.entities.user import User, User_id_name
+from db_layer.entities.user import User, User_id_name, User_publickey
 from db_layer.entities.secret import Secret, NewSecret
-from encryption import aes, rsa
+from encryption import aes, rsa, sss
 
 PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
 
@@ -77,6 +77,67 @@ async def get_secrets(request: Request):
     db_querriess = db_querries.db_querries()
     return db_querriess.get_all_secrets(user_id)
 
+
+# Secure endpoint that requires authentication
+@app.get("/secrets/{secret_id}", response_model=List[Secret])
+async def get_secret_by_id(request: Request, secret_id: int):
+    user_id = request.state.user['user_id']
+    db_querriess = db_querries.db_querries()
+    return db_querriess.get_shared_secret_by_id(user_id, secret_id)
+
+
+class DecryptRequest(BaseModel):
+    private_key: str
+
+# Secure endpoint that requires authentication
+#Update secret by ID - 
+@app.patch("/secrets/set_decript_request/{secret_id}")
+async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: DecryptRequest):
+    user_id = request.state.user['user_id']
+    db_querriess = db_querries.db_querries()
+    secret_data = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    if not secret_data:
+        return {"validation": False, "message": "Secret not found"}
+    
+    if secret_data['StartingDate'] is not None and datetime.datetime.now(datetime.timezone.utc) < secret_data['StartingDate']:
+        return {"validation": False, "message": "Secret is not available yet"}
+
+    #Check if the quorum is reached
+    quorum = secret_data['Quorum']
+    n_decrypt_request = secret_data['NDecryptRequest']
+    #Decrypt the secret share with the private key of the user
+    #1. Get the secret share from the database
+    secret_share = secret_data['SecretShare']
+    #2. Decrypt the secret share with the private key of the user
+    decrypted_secret_share = rsa.decrypt(decrypt_request.private_key, secret_share)
+
+    if n_decrypt_request < (quorum - 1):
+        # Update the secret share in the database with the decrypted secret share
+        # and set the decrypt request to true
+        db_querriess.set_decrypt_request(user_id, secret_id, decrypted_secret_share)
+
+
+    elif n_decrypt_request == quorum -1:
+        #Get all the secret shares that their decripy request is true from the database
+        decrypted_secret_shares = db_querriess.get_decrypted_secret_shares(secret_id)
+        decrypted_secret_shares.append(decrypted_secret_share)
+        # Reconstruct the secret with the secret shares
+        sss_secret = sss.reconstruct_secret(decrypted_secret_shares)
+
+        #Decrypt the secret for all the users that the secret is shared with
+        # Get the secret shares from the database
+        secret_shares = db_querriess.get_secret_shares(secret_id)
+        # Decrypt the secret for all the users that the secret is shared with
+        for share in secret_shares:
+            user_id = share['UserId']
+            encrypted_secret = rsa.encrypt(share['PublicKey'], sss_secret)
+            # Update the encrypted secret in the database and delete the secret share
+            db_querriess.set_encrypted_secret(user_id, secret_id, encrypted_secret)
+        
+
+
+    return {"validation": True, "message": "Secret updated successfully!"}
+
 # Secure endpoint that requires authentication
 @app.get("/users", response_model=List[User_id_name])
 async def get_users():
@@ -99,12 +160,10 @@ def insert_new_secret(request: Request, secret: NewSecret):
     if secret_data:
         return {"validation": False, "message": "Secret name already exists"}
     
-
     #Creating a new secret
     #1. Generate a random AES256 key and IV
     iv = aes.get_iv()
     aes_key = aes.get_secret_key()
-
     #2. Encrypt the secret with the AES256 key and store it in the Secrets table together with the metadata
     encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv)
     secret_id = db_querriess.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date)
@@ -114,14 +173,12 @@ def insert_new_secret(request: Request, secret: NewSecret):
     owner_encrypted_key = rsa.encrypt(owner_public_key, aes_key)
     db_querriess.insert_user_secret(user_id, secret_id, True, owner_encrypted_key)
     #4. Create the AES256 key shares for all the group members. Encrypt each share with the user public key and store it in the UserSecret table
-    secret_shares = sss.split_secret(aes_key, secret.quorum, len(secret.group_users))
-    i = 0
-    for user in secret.group_users:
-        user_public_key = db_querriess.get_user_publickey(user)
-        user_encrypted_key = rsa.encrypt(user_public_key, aes_key)
-        db_querriess.insert_user_secret(user_id, secret_id, False, secret_shares[i])
-        i += 1
+    secret_shares = sss.split_secret(aes_key, len(secret.group_users), secret.quorum)
 
+    for i, user in enumerate(secret.group_users):
+        user_public_key = db_querriess.get_user_publickey(user)
+        user_encrypted_share = rsa.encrypt(user_public_key, secret_shares[i])
+        db_querriess.insert_user_secret(user_id, secret_id, False, user_encrypted_share)
 
     return {"validation": True, "message": "Secret inserted successfully!"}
 

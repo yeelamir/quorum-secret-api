@@ -1,3 +1,15 @@
+import pylibscrypt
+
+# Split into n shares, requiring k to reconstruct
+def split_secret(secret: str, n: int, k: int):
+    return pylibscrypt.shamir.split(secret, k, n)
+
+# Recover the secret using at least k shares
+def reconstruct_secret(shares: list):
+    return pylibscrypt.sss.combine(shares)
+
+
+
 import numpy  as np
 
 def get_coefficients(X: np.array, Y: np.array) -> np.array:
