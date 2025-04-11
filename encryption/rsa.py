@@ -5,10 +5,15 @@ from Crypto.Random import get_random_bytes
 # Encrypts the plaintext using the public key (pem format)
 # Returns the ciphertext
 def encrypt(public_key_pem: str, plaintext: bytes) -> bytes:
-    public_key = RSA.import_key(public_key_pem)
-    cipher = PKCS1_OAEP.new(public_key)
-    return cipher.encrypt(plaintext)
-
+    try:
+        #public_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'), backend=default_backend())
+        public_key = RSA.import_key(public_key_pem)
+        cipher = PKCS1_OAEP.new(public_key)
+        return cipher.encrypt(plaintext)
+    except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+                return None
+    
 # Decrypts the ciphertext using the private key (pem format)
 # Returns the plaintext
 def decrypt(private_key_pem: str , ciphertext: bytes) -> bytes:

@@ -16,7 +16,6 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # Check if the current endpoint is exempt from authentication
         if self._is_exempt_route(request.url.path) or request.method == "OPTIONS" :
             response = await call_next(request)
-            response.headers["TestMe"] = "OK"
             return response
 
         token: Optional[str] = request.headers.get("Authorization")

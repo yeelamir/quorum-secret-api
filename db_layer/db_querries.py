@@ -6,7 +6,6 @@ from db_layer.entities.secret import Secret
 from db_layer.entities.user import User, User_id_name, User_publickey
 
 
-
 class db_querries:
     USERS_TABLE_FIELDS = {'Id': 0, 'PublicKey': 1, 'Username': 2, 'Salt': 3, 'PasswordHash': 4}
 
@@ -34,6 +33,10 @@ class db_querries:
         self.mycursor.execute(sql, username)
         return self.mycursor.fetchone()
     
+    # Get all secrets of a user by user_id. It will return the secrets if they exist and the user has access to them, otherwise None.
+    # Notes:
+    #  - The NDecryptRequest field is the number of users that have requested to decrypt the secret. 
+    #  - It is calculated by counting the number of distinct users that have requested to decrypt the secret.
     def get_all_secrets(self, user_id: int) -> List[Secret]:
             try:
                 sql = """
@@ -60,18 +63,18 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def get_user_publickey(self, id: int):
+    def get_user_publickey(self, id: int) -> str:
         try:
             sql = "SELECT PublicKey FROM users WHERE Id = %s;"
             self.mycursor.execute(sql, id)
-            return self.mycursor.fetchone()
+            return self.mycursor.fetchone()['PublicKey']
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def insert_secret(self, quorum: int, cipher: bytearray, name: str, comments: str, starting_date: datetime.datetime) -> int:
+    def insert_secret(self, quorum: int, cipher: bytearray, name: str, comments: str, starting_date: datetime.datetime, iv : bytes) -> int:
         try:
-            sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`, `StartingDate`) VALUES (%s, %s, %s, %s, %s);"
-            val = (quorum, cipher, name, comments, starting_date)
+            sql = "INSERT INTO secrets (`Quorum`, `Cipher`, `Name`, `Comments`, `StartingDate`, `IV`) VALUES (%s, %s, %s, %s, %s, %s);"
+            val = (quorum, cipher, name, comments, starting_date, iv)
             self.mycursor.execute(sql, val)
             self.mydb.commit()
             new_secret_id = self.mycursor.lastrowid  # Get the ID of the newly inserted row
@@ -94,7 +97,7 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def insert_user_secret(self, user_id: int, secret_id: int, is_owner: bool, secret_share: bytearray):
+    def insert_user_secret(self, user_id: int, secret_id: int, is_owner: bool, secret_share: str):
         try:
             if is_owner:
                 sql = "INSERT INTO usersecret (`UserId`, `SecretId`, `IsOwner`, `EncryptedSecret`) VALUES (%s, %s, %s, %s);"
@@ -103,10 +106,13 @@ class db_querries:
 
             val = (user_id, secret_id, is_owner, secret_share)
             self.mycursor.execute(sql, val) 
-        
+            self.mydb.commit()
+
         except Exception as e:
             print(f"An unexpected error occurred: {e}")     
 
+    # Get all users that have access to a secret by secret_id. 
+    # It will return the users if they exist and have access to the secret, otherwise None.
     def get_secret_users(self, secret_id: int) -> List[User_id_name]:
         try:
             sql = """
@@ -170,6 +176,13 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
+    def delete_secret_by_id(self, secret_id: int):
+        try:
+            sql = "DELETE FROM secrets WHERE Id = %s;"
+            self.mycursor.execute(sql, (secret_id,))
+            self.mydb.commit()
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
     def get_decrypted_secret_shares(self, secret_id: int) -> List[str]:
         try:

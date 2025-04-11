@@ -35,14 +35,17 @@ CREATE TABLE IF NOT EXISTS UserSecret (
     UserId BIGINT NOT NULL,                           -- Foreign key to User
     SecretId BIGINT NOT NULL,                         -- Foreign key to Secret
     IsOwner BOOLEAN NOT NULL,                         -- Boolean indicating if the user is the owner
-    SecretShare VARCHAR(1024),                        -- Optional string for secret share
-    EncryptedSecret VARCHAR(1024),                    -- Optional string for encrypted secret
+    SecretShare VARCHAR(1024),                        -- Secret share - for users that are not owners and the secret was not constructed yet
+                                                      -- The share is encrypted with the public key of the user, but when the DecryptRequest is set,
+                                                      -- the share is in plaintext
+    EncryptedSecret VARCHAR(1024),                    -- Encrypted secret key - For the owner and for the other users if the secret was constructed
+                                                      -- Its actually the AES key encrypted with the public key of the user
     DecryptRequest BOOLEAN NOT NULL DEFAULT 0,       -- Boolean indicating if decrypting is requested
     PRIMARY KEY (UserId, SecretId),                   -- Composite primary key on UserId and SecretId
     CONSTRAINT fk_user_id FOREIGN KEY (UserId)        -- Foreign key to User table
       REFERENCES Users (Id)
       ON DELETE CASCADE,                                -- Cascade delete if User is deleted
-    CONSTRAINT fk_secret_id FOREIGN KEY (SecretId)  -- Foreign key to Secret table
+    CONSTRAINT fk_secret_id FOREIGN KEY (SecretId)      -- Foreign key to Secret table
       REFERENCES Secrets (Id)
       ON DELETE CASCADE                                 -- Cascade delete if Secret is deleted
 ) 

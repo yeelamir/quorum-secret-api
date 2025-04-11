@@ -13,6 +13,7 @@ import secrets
 from db_layer.entities.user import User, User_id_name, User_publickey
 from db_layer.entities.secret import Secret, NewSecret
 from encryption import aes, rsa, sss
+import base64
 
 PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
 
@@ -32,10 +33,12 @@ app = FastAPI()
 
 
 origins = [
+    # This is the origin of the frontend application
     "http://localhost:3000",
 ]
 
 # Add CORSMiddleware to the FastAPI app
+# Allow the frontend application to access the backend REST API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -44,7 +47,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# List of exempt routes for authentication middleware
+# These routes will not require authentication
 exempt_routes = [
     r"/login",  # Exact match for public data endpoint
     r"^/register",         # Allow access to documentation without authentication
@@ -57,6 +61,7 @@ app.add_middleware(AuthenticationMiddleware, secret_key=get_secret_key(), exempt
 
 
 def generate_jwt_token(user_id: int, username: str, secret_key):
+    #TODO: Change the expiration to 60 minutes
     expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=360)  # expiration time 
     # Create the payload with user ID and username
     payload = {
@@ -70,7 +75,7 @@ def generate_jwt_token(user_id: int, username: str, secret_key):
     return token, expiration
 
 
-# Secure endpoint that requires authentication
+# Get all the secrets for the user
 @app.get("/secrets", response_model=List[Secret])
 async def get_secrets(request: Request):
     user_id = request.state.user['user_id']
@@ -78,19 +83,35 @@ async def get_secrets(request: Request):
     return db_querriess.get_all_secrets(user_id)
 
 
-# Secure endpoint that requires authentication
-@app.get("/secrets/{secret_id}", response_model=List[Secret])
+# Get a secret by ID
+@app.get("/secrets/{secret_id}", response_model=Secret)
 async def get_secret_by_id(request: Request, secret_id: int):
     user_id = request.state.user['user_id']
     db_querriess = db_querries.db_querries()
     return db_querriess.get_shared_secret_by_id(user_id, secret_id)
 
 
+# Delete secret by ID - only the owner can delete it
+@app.delete("/secrets/{secret_id}")
+async def delete_secret_by_id(request: Request, secret_id: int):
+    user_id = request.state.user['user_id']
+    db_querriess = db_querries.db_querries()
+
+    secret = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    if not secret:
+        return {"validation": False, "message": "Secret not found"}
+    if not secret['IsOwner']:
+        return {"validation": False, "message": "You are not the owner of this secret"}
+
+    db_querriess.delete_secret_by_id(secret_id)
+
+    return {"validation": True, "message": "Secret deleted successfully!"}
+
+
 class DecryptRequest(BaseModel):
     private_key: str
 
-# Secure endpoint that requires authentication
-#Update secret by ID - 
+# Set the DecryptRequest for a secret
 @app.patch("/secrets/set_decript_request/{secret_id}")
 async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: DecryptRequest):
     user_id = request.state.user['user_id']
@@ -166,19 +187,22 @@ def insert_new_secret(request: Request, secret: NewSecret):
     aes_key = aes.get_secret_key()
     #2. Encrypt the secret with the AES256 key and store it in the Secrets table together with the metadata
     encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv)
-    secret_id = db_querriess.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date)
+    secret_id = db_querriess.insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date, iv)
     #3. Encrypt the AES256 key with the public keys of the owner and the group members and store it in the UserSecret table
     user_id = request.state.user['user_id']
     owner_public_key = db_querriess.get_user_publickey(user_id)
     owner_encrypted_key = rsa.encrypt(owner_public_key, aes_key)
-    db_querriess.insert_user_secret(user_id, secret_id, True, owner_encrypted_key)
+    owner_encrypted_key_str = base64.b64encode(owner_encrypted_key).decode('utf-8')
+    db_querriess.insert_user_secret(user_id, secret_id, True, owner_encrypted_key_str)
     #4. Create the AES256 key shares for all the group members. Encrypt each share with the user public key and store it in the UserSecret table
     secret_shares = sss.split_secret(aes_key, len(secret.group_users), secret.quorum)
 
     for i, user in enumerate(secret.group_users):
         user_public_key = db_querriess.get_user_publickey(user)
-        user_encrypted_share = rsa.encrypt(user_public_key, secret_shares[i])
-        db_querriess.insert_user_secret(user_id, secret_id, False, user_encrypted_share)
+        secret_share_bytes = base64.b64decode(secret_shares[i])
+        user_encrypted_share = rsa.encrypt(user_public_key, secret_share_bytes)
+        user_encrypted_share_str = base64.b64encode(user_encrypted_share).decode('utf-8')
+        db_querriess.insert_user_secret(user_id, secret_id, False, user_encrypted_share_str)
 
     return {"validation": True, "message": "Secret inserted successfully!"}
 
