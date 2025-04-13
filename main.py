@@ -14,6 +14,19 @@ from db_layer.entities.user import User, User_id_name, User_publickey
 from db_layer.entities.secret import Secret, NewSecret
 from encryption import aes, rsa, sss
 import base64
+from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.openapi.models import OAuth2 as OAuth2Model
+from fastapi.security import OAuth2PasswordBearer
+
+
+
+# test_secret = b'a' * 32  # 256 bits = 32 bytes
+# shares = sss.split_secret(test_secret, 3, 2)  # Split into 3 shares, with a quorum of 2
+# test_secret_reconstructed = sss.reconstruct_secret(shares[:2])  # Reconstruct using 2 shares
+# if test_secret != test_secret_reconstructed:
+#     print("Secret reconstruction failed!")
+# else:
+#     print("Secret reconstruction succeeded!")
 
 PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
 
@@ -28,7 +41,38 @@ def random_salt() -> str:
 def get_secret_key():
     return os.getenv("QUORUM_APP_SECRET_KEY", "defaultsecretkey") 
 
-app = FastAPI()
+app = FastAPI(
+    title="Quorum Secret API",
+    description="API for managing secrets with quorum-based sharing and encryption.",
+    version="1.0.0"
+)
+
+
+from fastapi.openapi.utils import get_openapi
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+        }
+    }
+    for path in openapi_schema["paths"].values():
+        for method in path.values():
+            method.setdefault("security", []).append({"BearerAuth": []})
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 
 
@@ -78,9 +122,14 @@ def generate_jwt_token(user_id: int, username: str, secret_key):
 # Get all the secrets for the user
 @app.get("/secrets", response_model=List[Secret])
 async def get_secrets(request: Request):
-    user_id = request.state.user['user_id']
-    db_querriess = db_querries.db_querries()
-    return db_querriess.get_all_secrets(user_id)
+    try:
+        # Get the user ID from the request state
+        user_id = request.state.user['user_id']
+        db_querriess = db_querries.db_querries()
+        return db_querriess.get_all_secrets(user_id)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 # Get a secret by ID
@@ -108,20 +157,25 @@ async def delete_secret_by_id(request: Request, secret_id: int):
     return {"validation": True, "message": "Secret deleted successfully!"}
 
 
-class DecryptRequest(BaseModel):
+class PrivateKey(BaseModel):
     private_key: str
 
 # Set the DecryptRequest for a secret
 @app.patch("/secrets/set_decript_request/{secret_id}")
-async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: DecryptRequest):
+async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: PrivateKey):
     user_id = request.state.user['user_id']
     db_querriess = db_querries.db_querries()
     secret_data = db_querriess.get_shared_secret_by_id(user_id, secret_id)
     if not secret_data:
         return {"validation": False, "message": "Secret not found"}
     
-    if secret_data['StartingDate'] is not None and datetime.datetime.now(datetime.timezone.utc) < secret_data['StartingDate']:
-        return {"validation": False, "message": "Secret is not available yet"}
+    if secret_data['StartingDate'] is not None:
+        starting_date = secret_data['StartingDate'].replace(tzinfo=datetime.timezone.utc)
+        if datetime.datetime.now(datetime.timezone.utc) < starting_date:
+            return {"validation": False, "message": "Secret is not available yet"}
+    
+    if secret_data['NDecryptRequest'] >= secret_data['Quorum']:
+        return {"validation": False, "message": "Secret is already decrypted"}
 
     #Check if the quorum is reached
     quorum = secret_data['Quorum']
@@ -130,18 +184,16 @@ async def set_decrypt_request(request: Request, secret_id: int, decrypt_request:
     #1. Get the secret share from the database
     secret_share = secret_data['SecretShare']
     #2. Decrypt the secret share with the private key of the user
-    decrypted_secret_share = rsa.decrypt(decrypt_request.private_key, secret_share)
+    decrypted_secret_share = rsa.decrypt(decrypt_request.private_key, base64.b64decode(secret_share))
 
-    if n_decrypt_request < (quorum - 1):
-        # Update the secret share in the database with the decrypted secret share
-        # and set the decrypt request to true
-        db_querriess.set_decrypt_request(user_id, secret_id, decrypted_secret_share)
+    # Update the secret share in the database with the decrypted secret share
+    # and set the decrypt request to true
+    db_querriess.set_decrypt_request(user_id, secret_id, base64.b64encode(decrypted_secret_share))
 
 
-    elif n_decrypt_request == quorum -1:
+    if n_decrypt_request == quorum -1:
         #Get all the secret shares that their decripy request is true from the database
-        decrypted_secret_shares = db_querriess.get_decrypted_secret_shares(secret_id)
-        decrypted_secret_shares.append(decrypted_secret_share)
+        decrypted_secret_shares = [n['SecretShare'] for n in db_querriess.get_decrypted_secret_shares(secret_id)]
         # Reconstruct the secret with the secret shares
         sss_secret = sss.reconstruct_secret(decrypted_secret_shares)
 
@@ -153,11 +205,35 @@ async def set_decrypt_request(request: Request, secret_id: int, decrypt_request:
             user_id = share['UserId']
             encrypted_secret = rsa.encrypt(share['PublicKey'], sss_secret)
             # Update the encrypted secret in the database and delete the secret share
-            db_querriess.set_encrypted_secret(user_id, secret_id, encrypted_secret)
+            db_querriess.set_encrypted_secret(user_id, secret_id, base64.b64encode(encrypted_secret))
         
 
 
     return {"validation": True, "message": "Secret updated successfully!"}
+
+# Get the secret content by ID - Available only for the secret owner or 
+# if the secret is shared with the user and the number of decrypt requests is equal to the quorum
+@app.post("/secrets/secret_content/{secret_id}")
+async def set_decrypt_request(request: Request, secret_id: int, user_private_key: PrivateKey):
+    user_id = request.state.user['user_id']
+    db_querriess = db_querries.db_querries()
+    secret_data = db_querriess.get_shared_secret_by_id(user_id, secret_id)
+    if not secret_data:
+        return {"validation": False, "message": "Secret not found"}
+    
+    if secret_data['EncryptedSecret'] == None:
+        return {"validation": False, "message": "Secret is not available yet"}
+    
+    #Decrypt the secret with the private key of the user
+    aes_key = rsa.decrypt(user_private_key.private_key, base64.b64decode(secret_data['EncryptedSecret'])) 
+    cipher_and_iv = db_querriess.get_cipher_by_id(secret_id)
+    #Decrypt the secret with the AES256 key and IV
+    iv = cipher_and_iv['IV']  
+    the_secret = aes.decrypt_secret(cipher_and_iv['Cipher'], aes_key, iv)
+    return the_secret.decode('utf-8')
+
+
+
 
 # Secure endpoint that requires authentication
 @app.get("/users", response_model=List[User_id_name])
@@ -202,7 +278,7 @@ def insert_new_secret(request: Request, secret: NewSecret):
         secret_share_bytes = base64.b64decode(secret_shares[i])
         user_encrypted_share = rsa.encrypt(user_public_key, secret_share_bytes)
         user_encrypted_share_str = base64.b64encode(user_encrypted_share).decode('utf-8')
-        db_querriess.insert_user_secret(user_id, secret_id, False, user_encrypted_share_str)
+        db_querriess.insert_user_secret(user, secret_id, False, user_encrypted_share_str)
 
     return {"validation": True, "message": "Secret inserted successfully!"}
 

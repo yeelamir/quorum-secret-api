@@ -63,6 +63,14 @@ class db_querries:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
+    def get_cipher_by_id(self, id: int):
+        try:
+            sql = "SELECT Cipher, IV FROM secrets WHERE Id = %s;"
+            self.mycursor.execute(sql, id)
+            return self.mycursor.fetchone()
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
     def get_user_publickey(self, id: int) -> str:
         try:
             sql = "SELECT PublicKey FROM users WHERE Id = %s;"
@@ -187,7 +195,7 @@ class db_querries:
     def get_decrypted_secret_shares(self, secret_id: int) -> List[str]:
         try:
             sql = """
-                SELECT us.SecretShare, 
+                SELECT us.SecretShare 
                 FROM quorum_secrets.usersecret us
                 WHERE us.DecryptRequest = 1 AND us.SecretId = %s;
             """
@@ -200,8 +208,9 @@ class db_querries:
     def get_secret_shares(self, secret_id) -> List[User_publickey]:
         try:
             sql = """
-                SELECT us.UserId, us.PublicKey
+                SELECT us.UserId, u.PublicKey
                 FROM quorum_secrets.usersecret us
+                join quorum_secrets.users u on u.Id = us.UserId
                 WHERE us.SecretId = %s;
             """
             self.mycursor.execute(sql, (secret_id,))

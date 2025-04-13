@@ -38,7 +38,7 @@ def split_secret(secret_bytes: bytes, n: int, k: int) -> List[str]:
     base64_shares = []
     for x, y in shares:
         # Convert the x and y values to bytes
-        x_bytes = x.to_bytes((x.bit_length() + 7) // 8, byteorder='big')
+        x_bytes = x.to_bytes(3, byteorder='big')
         y_bytes = y.to_bytes((y.bit_length() + 7) // 8, byteorder='big')
         
         # Concatenate x and y bytes
@@ -57,9 +57,8 @@ def reconstruct_secret(base64_shares: List[str]) -> bytes:
     for share in base64_shares:
         share_bytes = base64.b64decode(share)
         # Split the bytes into x and y parts
-        x_len = (share_bytes[0] & 0xFF)  # The length of x in bytes (assuming it's 1 byte length)
-        x = int.from_bytes(share_bytes[:x_len], byteorder='big')
-        y = int.from_bytes(share_bytes[x_len:], byteorder='big')
+        x = int.from_bytes(share_bytes[: 3], byteorder='big')
+        y = int.from_bytes(share_bytes[3:], byteorder='big')
         shares.append((x, y))
 
     secret_int = 0
