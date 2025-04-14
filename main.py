@@ -161,7 +161,7 @@ class PrivateKey(BaseModel):
     private_key: str
 
 # Set the DecryptRequest for a secret
-@app.patch("/secrets/set_decript_request/{secret_id}")
+@app.patch("/secrets/set_decrypt_request/{secret_id}")
 async def set_decrypt_request(request: Request, secret_id: int, decrypt_request: PrivateKey):
     user_id = request.state.user['user_id']
     db_querriess = db_querries.db_querries()
