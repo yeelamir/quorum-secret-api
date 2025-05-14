@@ -1,10 +1,7 @@
-from typing import List, Dict, Any, Optional # Added Dict, Any, Optional for better typing
+from typing import List, Dict, Any, Optional 
 import pymysql
 from pymysql.cursors import DictCursor
 import datetime
-# Assuming these entities are defined elsewhere, imports remain the same
-# from db_layer.entities.secret import Secret
-# from db_layer.entities.user import User, User_id_name, User_publickey
 
 
 class data_access_layer:
@@ -13,8 +10,6 @@ class data_access_layer:
     This class provides methods to interact with the database, including inserting, updating,
     and retrieving user and secret information.
     """ 
-
-    USERS_TABLE_FIELDS = {'Id': 0, 'PublicKey': 1, 'Username': 2, 'Salt': 3, 'PasswordHash': 4}
 
     def __init__(self, db_host, db_user, db_password, db_name):
         self.db_config = {
@@ -140,22 +135,6 @@ class data_access_layer:
             WHERE us.SecretId = %s;
         """
         return self._execute_query(sql, (secret_id,), fetch_all=True) or []
-
-    def select_user(self, fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        if fields is None:
-            query = "SELECT * FROM users;"
-            return self._execute_query(query, fetch_all=True) or []
-
-        valid_fields = [field for field in fields if field in self.USERS_TABLE_FIELDS.keys()]
-
-        if not valid_fields:
-            # Consider raising a ValueError or returning empty list based on desired behavior
-            print("No valid fields selected for select_user. Returning all fields.")
-            query = "SELECT * FROM users;" # Default to all if invalid fields are the only ones
-        else:
-            query = f"SELECT {', '.join(valid_fields)} FROM users;"
-        
-        return self._execute_query(query, fetch_all=True) or []
 
 
     def get_shared_secret_by_id(self, user_id: int, secret_id: int) -> Optional[Dict[str, Any]]: # Assuming Secret can be Dict

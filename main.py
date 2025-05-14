@@ -10,25 +10,13 @@ import uvicorn
 from hashlib import sha256
 import secrets
 from db_layer.db_querries import data_access_layer
-from db_layer.entities.user import User, User_id_name, User_publickey
+from db_layer.entities.user import User, User_id_name
 from db_layer.entities.secret import Secret, NewSecret
 from encryption import aes, rsa, sss
 import base64
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.openapi.models import OAuth2 as OAuth2Model
-from fastapi.security import OAuth2PasswordBearer
 
 
-
-# test_secret = b'a' * 32  # 256 bits = 32 bytes
-# shares = sss.split_secret(test_secret, 3, 2)  # Split into 3 shares, with a quorum of 2
-# test_secret_reconstructed = sss.reconstruct_secret(shares[:2])  # Reconstruct using 2 shares
-# if test_secret != test_secret_reconstructed:
-#     print("Secret reconstruction failed!")
-# else:
-#     print("Secret reconstruction succeeded!")
-
-PEPPER = "d5f3ce1e98860bbc95b7140df809db5f"
+PEPPER = os.getenv("QUORUM_APP_PEPPER", "d5f3ce1e98860bbc95b7140df809db5f"),
 
 def hash_password_with_salt(password: str, salt: str) -> str:
     sha256_val = sha256((salt + PEPPER + password).encode())
