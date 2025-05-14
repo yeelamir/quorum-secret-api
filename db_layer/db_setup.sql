@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS Users (
 CREATE TABLE IF NOT EXISTS Secrets (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,              -- Secret Id, auto-incremented
     Quorum SMALLINT NOT NULL,                          -- Quorum, short integer
-    IV BINARY(16) NOT NULL                             -- IV for the cipher
+    IV BINARY(16) NOT NULL,                             -- IV for the cipher
     Cipher BLOB NOT NULL,                              -- Cipher, stored as BLOB
     Name VARCHAR(256) NOT NULL,                        -- Name of the secret, up to 256 chars
     Comments TEXT NOT NULL,                            -- Comments, up to 4096 chars
