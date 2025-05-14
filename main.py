@@ -12,19 +12,10 @@ import secrets
 from db_layer.db_querries import data_access_layer
 from db_layer.entities.user import User, User_id_name
 from db_layer.entities.secret import Secret, NewSecret
-from encryption import aes, rsa, sss
+from encryption import aes, rsa, sss, hash
 import base64
 
 
-PEPPER = os.getenv("QUORUM_APP_PEPPER", "d5f3ce1e98860bbc95b7140df809db5f"),
-
-def hash_password_with_salt(password: str, salt: str) -> str:
-    sha256_val = sha256((salt + PEPPER + password).encode())
-    # Return the hexadecimal representation of the hash
-    return sha256_val.hexdigest()
-
-def random_salt() -> str:
-    return secrets.token_hex(16)
 
 def get_secret_key():
     return os.getenv("QUORUM_APP_SECRET_KEY", "defaultsecretkey") 
@@ -275,7 +266,7 @@ def login(user: User):
     if user_data:
         password_hash = user_data['PasswordHash']
         salt = user_data['Salt']
-        if hash_password_with_salt(user.password, salt) == password_hash:
+        if hash.hash_password_with_salt(user.password, salt) == password_hash:
             user_id = user_data['Id']
             token, expiration = generate_jwt_token(user_id, user.username, get_secret_key())
             return TokenModel(expiration=expiration.isoformat(), token = token)
@@ -289,8 +280,8 @@ def register(user: User):
         return {"validation": False, "message": "Username already exists"}
     else:
         public_key, private_key = rsa.generate_key()
-        salt = random_salt()
-        data_access_layer.insert_user(public_key, user.username, salt, hash_password_with_salt(user.password, salt))
+        salt = hash.random_salt()
+        data_access_layer.insert_user(public_key, user.username, salt, hash.hash_password_with_salt(user.password, salt))
         return {"validation": True, "message": "User registered successfully!", "private_key": private_key}
 
 
