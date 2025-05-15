@@ -7,4 +7,3 @@ class User_id_name(BaseModel):
 
     class Config:
         orm_mode = True  # This tells Pydantic to work with dictionary-like data (from SQL query results)
-
