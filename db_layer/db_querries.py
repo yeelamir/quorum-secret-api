@@ -1,8 +1,10 @@
+import os
 from typing import List, Dict, Any, Optional 
 import pymysql
 from pymysql.cursors import DictCursor
 import datetime
 
+from db_layer.entities.user import User_id_name
 
 class data_access_layer:
     """
@@ -10,6 +12,7 @@ class data_access_layer:
     This class provides methods to interact with the database, including inserting, updating,
     and retrieving user and secret information.
     """ 
+
 
     def __init__(self, db_host, db_user, db_password, db_name):
         self.db_config = {
@@ -114,7 +117,7 @@ class data_access_layer:
         print("Secret record inserted.", new_secret_id)
         return new_secret_id
 
-    def get_users(self) -> List[Dict[str, Any]]: # Assuming User_id_name can be Dict
+    def get_users(self) -> List[User_id_name]: 
         sql = "SELECT Id, Username FROM quorum_secrets.users;"
         return self._execute_query(sql, fetch_all=True) or []
 
@@ -127,7 +130,7 @@ class data_access_layer:
         self._execute_query(sql, val, is_insert=True) # Use is_insert for commit
         # Original code didn't print, so keeping it that way
 
-    def get_secret_users(self, secret_id: int) -> List[Dict[str, Any]]: # Assuming User_id_name can be Dict
+    def get_secret_users(self, secret_id: int) -> List[User_id_name]: 
         sql = """
             SELECT us.UserId, s.Username
             FROM quorum_secrets.usersecret us
