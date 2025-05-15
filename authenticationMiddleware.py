@@ -1,15 +1,16 @@
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 import jwt
 from typing import Optional
 import re
 
+from utils.jwt_handler import decode_jwt_token
+
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, secret_key: str, exempt_routes: Optional[list] = None):
+    def __init__(self, app, exempt_routes: Optional[list] = None):
         super().__init__(app)
-        self.secret_key = secret_key
         self.exempt_routes = exempt_routes if exempt_routes else []
 
     async def dispatch(self, request: Request, call_next):
@@ -24,7 +25,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         try:
             token = token.split(" ")[1]  # Extract token part (Bearer <token>)
-            payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
+            payload = decode_jwt_token(token)
             request.state.user = payload  # Store the user data in request state
         except jwt.ExpiredSignatureError:
             return JSONResponse(status_code=401, content={"detail": "Token has expired"})

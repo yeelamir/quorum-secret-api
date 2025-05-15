@@ -2,8 +2,6 @@ from pydantic import BaseModel
 import datetime
 from typing import Optional
 from typing import List
-import base64
-import base64
 
 # Pydantic model to represent each secret
 
