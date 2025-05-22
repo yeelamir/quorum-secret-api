@@ -25,7 +25,7 @@ def insert_new_secret(request: Request, secret: NewSecret):
     iv = aes.get_iv()
     aes_key = aes.get_secret_key()
     #2. Encrypt the secret with the AES256 key and store it in the Secrets table together with the metadata
-    encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv)
+    encrypted_secret = aes.encrypt_secret(secret.secret.encode('utf-8'), aes_key, iv, secret.name)
     secret_id = get_data_access_layer().insert_secret(secret.quorum, encrypted_secret, secret.name, secret.comment, secret.starting_date, iv)
     #3. Encrypt the AES256 key with the public keys of the owner and the group members and store it in the UserSecret table
     user_id = request.state.user['user_id']
@@ -153,6 +153,9 @@ async def set_decrypt_request(request: Request, secret_id: int, user_private_key
     cipher_and_iv = get_data_access_layer().get_cipher_by_id(secret_id)
     #Decrypt the secret with the AES256 key and IV
     iv = cipher_and_iv['IV']  
-    the_secret = aes.decrypt_secret(cipher_and_iv['Cipher'], aes_key, iv)
-    return the_secret.decode('utf-8')
+    try:
+        the_secret = aes.decrypt_secret(cipher_and_iv['Cipher'], aes_key, iv, secret_data['Name'])
+        return the_secret.decode('utf-8')
+    except Exception as e:
+        return {"validation": False, "message": f"Failed to decrypt secret: {str(e)}"}
 
