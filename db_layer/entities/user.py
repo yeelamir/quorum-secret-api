@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+
 
 class User_id_name(BaseModel):
     Id: int
