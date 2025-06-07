@@ -6,4 +6,5 @@ PyJWT
 Crypto
 hashlib
 pydantic
-fastapi uvicorn[standard]
+fastapi 
+uvicorn[standard]
