@@ -3,3 +3,7 @@ numpy
 pymysql
 pycryptodome
 PyJWT
+Crypto
+hashlib
+pydantic
+fastapi uvicorn[standard]
