@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from db_layer.db_accessor import get_data_access_layer
 from db_layer.entities.secret import NewSecret, Secret
-from encryption import aes, rsa
+from encryption import aes, rsa, sss
 
 
 router = APIRouter(
