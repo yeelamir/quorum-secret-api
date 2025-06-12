@@ -15,7 +15,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Check if the current endpoint is exempt from authentication
-        if self._is_exempt_route(request.url.path) or request.method == "OPTIONS" or not request.url.path.startswith("/api/"):
+        if self._is_exempt_route(request.url.path) or request.method == "OPTIONS" :
             response = await call_next(request)
             return response
 
