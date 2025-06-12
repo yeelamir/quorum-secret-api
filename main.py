@@ -39,17 +39,11 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-
-origins = [
-    # This is the origin of the frontend application
-    "http://localhost:3000",
-]
-
 # Add CORSMiddleware to the FastAPI app
 # Allow the frontend application to access the backend REST API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=['*'],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,4 +66,4 @@ app.include_router(auth_router.router, prefix="") # Auth routes at root (e.g. /l
 app.include_router(users_router.router) # Default prefix is /users from the router file
 app.include_router(secrets_router.router) # Default prefix is /secrets from the router file
 
-uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
