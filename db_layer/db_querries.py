@@ -174,7 +174,7 @@ class data_access_layer:
         results = self._execute_query(sql, (secret_id,), fetch_all=True)
         return results or [] # Ensure list is returned
 
-    def get_secret_shares_users_publickey(self, secret_id: int) -> List[Dict[str, Any]]: # Renamed for clarity, User_publickey implies UserId and PublicKey
+    def get_secret_shares(self, secret_id: int) -> List[Dict[str, Any]]: # Renamed for clarity, User_publickey implies UserId and PublicKey
         sql = """
             SELECT us.UserId, u.PublicKey
             FROM quorum_secrets.usersecret us
