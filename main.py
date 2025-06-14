@@ -66,4 +66,11 @@ app.include_router(auth_router.router, prefix="") # Auth routes at root (e.g. /l
 app.include_router(users_router.router) # Default prefix is /users from the router file
 app.include_router(secrets_router.router) # Default prefix is /secrets from the router file
 
-uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+uvicorn.run(
+    app,
+    host="0.0.0.0",
+    port=8000,
+    log_level="info",
+    ssl_keyfile="quorum_certificate/test-quorum-secret-key.pem",
+    ssl_certfile="quorum_certificate/test-quorum-secret-cert.pem"    
+)
