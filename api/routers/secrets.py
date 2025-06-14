@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from db_layer.db_accessor import get_data_access_layer
-from db_layer.entities.secret import NewSecret, Secret
+from db_layer.entities.secret import NewSecret, Secret, SecretMember
 from encryption import aes, rsa, sss
 
 
@@ -58,6 +58,11 @@ async def get_all_secrets_for_current_user(request: Request):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
+# Get users that are members in a given secret
+@router.get("/members/{secret_id}", response_model=List[SecretMember])
+async def get_secret_members_by_id(request: Request, secret_id: int):
+    user_id = request.state.user['user_id']
+    return get_data_access_layer().get_secret_members_by_secret_id(user_id, secret_id)
 
 
 # Get a secret by ID

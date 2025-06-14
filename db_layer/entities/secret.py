@@ -22,6 +22,18 @@ class Secret(BaseModel):
     EncryptedSecret: Optional[str] = None
 
 
+class SecretMember(BaseModel):
+    class Config:
+        orm_mode = True  # This tells Pydantic to work with dictionary-like data (from SQL query results)
+
+    UserId: int
+    DecryptRequest: bool
+    IsOwner: bool
+    UserName: str
+
+
+
+
     #{"name":"sha256","secret":"shhhh","quorum":"2","comment":"","starting_date":"2025-02-28","group_users":[13,18,15]}
 class NewSecret(BaseModel):
     name: str

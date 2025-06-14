@@ -4,6 +4,7 @@ import pymysql
 from pymysql.cursors import DictCursor
 import datetime
 
+from db_layer.entities.secret import SecretMember
 from db_layer.entities.user import User_id_name
 
 class data_access_layer:
@@ -97,6 +98,25 @@ class data_access_layer:
         """
         return self._execute_query(sql, (user_id,), fetch_all=True) or []
 
+
+    def get_secret_members_by_secret_id(self, user_id: int, secret_id: int) -> List[SecretMember]:
+        """
+        Retrieves all members associated with a specific secret ID for a given user.
+        Args:
+            user_id (int): The ID of the user requesting the secret members.
+            secret_id (int): The ID of the secret whose members are to be retrieved.
+        Returns:
+            List[SecretMember]: A list of SecretMember objects representing the members of the secret.
+        """
+        sql = """
+            SELECT us.UserId, us.DecryptRequest, us.IsOwner, u.Username AS UserName
+            FROM quorum_secrets.usersecret us
+            JOIN quorum_secrets.users u ON u.Id = us.UserId
+            WHERE us.SecretId = %s AND %s in (select us1.UserId from  usersecret us1 where us1.SecretId = 56)
+        """
+        return self._execute_query(sql, (secret_id, user_id), fetch_all=True) or []
+
+
     def get_secret_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         sql = "SELECT * FROM secrets WHERE Name = %s;"
         return self._execute_query(sql, (name,), fetch_one=True)
@@ -117,9 +137,9 @@ class data_access_layer:
         print("Secret record inserted.", new_secret_id)
         return new_secret_id
 
-    def get_users(self) -> List[User_id_name]: 
-        sql = "SELECT Id, Username FROM quorum_secrets.users;"
-        return self._execute_query(sql, fetch_all=True) or []
+    def get_users(self, current_user_id: int) -> List[User_id_name]: 
+        sql = "SELECT Id, Username FROM quorum_secrets.users WHERE Id <> %s;"
+        return self._execute_query(sql, (current_user_id,), fetch_all=True) or []
 
     def insert_user_secret(self, user_id: int, secret_id: int, is_owner: bool, secret_data: str): # Renamed secret_share to secret_data
         if is_owner:
